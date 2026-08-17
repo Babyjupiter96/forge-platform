@@ -1,0 +1,29 @@
+{
+  "name": "forge-platform",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:up": "bash scripts/db-up.sh",
+    "db:migrate": "pnpm --filter @forge/db exec prisma migrate dev",
+    "db:seed": "pnpm --filter @forge/db exec prisma db seed",
+    "db:studio": "pnpm --filter @forge/db exec prisma studio",
+    "chat-cli": "tsx --env-file=.env scripts/chat-cli.ts"
+  },
+  "dependencies": {
+    "@forge/db": "workspace:*"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

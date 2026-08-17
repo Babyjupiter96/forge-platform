@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ConversationStatus {
+  ACTIVE
+  QUALIFIED
+  BOOKED
+  ABANDONED
+  DISQUALIFIED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+enum LeadStatus {
+  NEEDS_INFO
+  QUALIFIED
+  DISQUALIFIED
+  BOOKED
+}
+
+enum BookingProviderType {
+  CALENDLY_LINK
+  CALENDLY_API
+  MOCK
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users               OrgUser[]
+  sites               Site[]
+  conversations       Conversation[]
+  leads               Lead[]
+  bookingIntegrations BookingIntegration[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?
+  createdAt    DateTime @default(now())
+
+  memberships OrgUser[]
+}
+
+model OrgUser {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String
+  role      OrgRole  @default(MEMBER)
+  createdAt DateTime @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+}
+
+model Site {
+  id             String   @id @default(cuid())
+  orgId          String
+  name           String
+  embedKey       String   @unique @default(cuid())
+  allowedOrigins String[]
+  isActive       Boolean  @default(true)
+
+  // Flat theme tokens consumed by the widget for Shadow DOM styling.
+  themeTokens Json
+
+  greeting      String @default("Hey — what's going on with your business right now?")
+  personaConfig Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org           Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@index([orgId])
+}
+
+model Conversation {
+  id        String             @id @default(cuid())
+  orgId     String
+  siteId    String
+  visitorId String
+  status    ConversationStatus @default(ACTIVE)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  site     Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  messages Message[]
+  lead     Lead?
+
+  @@index([orgId])
+  @@index([siteId, visitorId])
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  orgId          String
+  conversationId String
+  role           MessageRole
+  content        String      @db.Text
+  toolCallJson   Json?
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([conversationId, createdAt])
+}
+
+model Lead {
+  id             String @id @default(cuid())
+  orgId          String
+  conversationId String @unique
+
+  businessType     String?
+  servicesOffered  String[] @default([])
+  leadSources      String[] @default([])
+  hasWebsite       Boolean?
+  websiteUrl       String?
+  currentProblems  String[] @default([])
+  monthlyLeadVolume String?
+  growthBottleneck String?
+  pipelineStage    String?
+  fitServiceArea   String?
+  budgetRange      String?
+  timeline         String?
+  isDecisionMaker  Boolean?
+
+  score          Int        @default(0)
+  scoreBreakdown Json?
+  status         LeadStatus @default(NEEDS_INFO)
+  scoredAt       DateTime?
+
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+
+  bookingUrl String?
+  bookedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status])
+}
+
+model BookingIntegration {
+  id             String              @id @default(cuid())
+  orgId          String
+  provider       BookingProviderType
+  config         Json
+  credentialsRef String?
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}

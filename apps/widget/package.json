@@ -1,0 +1,8 @@
+{
+  "name": "@forge/widget",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'widget build not implemented yet — Phase 4'"
+  }
+}
