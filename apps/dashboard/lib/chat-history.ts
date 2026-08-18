@@ -30,7 +30,7 @@ export function buildHistoryFromMessages(messages: Message[]): ChatHistoryMessag
       });
 
       for (const call of rawToolCalls ?? []) {
-        history.push({ role: "tool", content: "ok", toolCallId: call.id });
+        history.push({ role: "tool", content: "ok", toolCallId: call.id, toolName: call.name });
       }
     }
     // SYSTEM/TOOL rows are not persisted directly today — system prompt is

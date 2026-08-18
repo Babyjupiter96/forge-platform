@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { Content, FunctionDeclarationSchema } from "@google/generative-ai";
+import type { Content, FunctionDeclarationSchema, Part } from "@google/generative-ai";
 import type { AIProvider, AIStreamEvent, ChatHistoryMessage, ChatRequest } from "../provider";
 
 /**
@@ -14,7 +14,7 @@ export class GeminiProvider implements AIProvider {
 
   constructor(opts: { apiKey: string; model?: string }) {
     this.client = new GoogleGenerativeAI(opts.apiKey);
-    this.modelName = opts.model ?? "gemini-2.0-flash";
+    this.modelName = opts.model ?? "gemini-3.6-flash";
   }
 
   async *streamChat(request: ChatRequest): AsyncIterable<AIStreamEvent> {
@@ -67,18 +67,36 @@ export class GeminiProvider implements AIProvider {
 }
 
 /**
- * Gemini has no equivalent of OpenAI's "tool" role message (an
- * acknowledgment reply required to satisfy OpenAI's own protocol) — our
- * synthetic "ok" tool-response entries exist only to keep OpenAI happy on
- * replay, so they're simply dropped here rather than translated.
+ * Gemini represents a tool-calling exchange with actual functionCall /
+ * functionResponse parts, not plain text — collapsing a tool call into an
+ * empty-text "model" turn (an earlier version of this function did
+ * exactly that) means the model has no record it ever called anything,
+ * and it will just call the same function again on the next round
+ * instead of ever producing a final reply. Each entry here maps
+ * structurally, not just by role name.
  */
 function toGeminiHistory(history: ChatHistoryMessage[]): Content[] {
-  return history
-    .filter((m) => m.role !== "tool")
-    .map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content || " " }],
-    }));
+  return history.map((m): Content => {
+    if (m.role === "user") {
+      return { role: "user", parts: [{ text: m.content || " " }] };
+    }
+
+    if (m.role === "assistant") {
+      const parts: Part[] = [];
+      if (m.content) parts.push({ text: m.content });
+      for (const call of m.toolCalls ?? []) {
+        parts.push({ functionCall: { name: call.name, args: call.args } } as Part);
+      }
+      if (parts.length === 0) parts.push({ text: " " });
+      return { role: "model", parts };
+    }
+
+    // role === "tool": Gemini's function-response turn.
+    return {
+      role: "function",
+      parts: [{ functionResponse: { name: m.toolName ?? "unknown", response: { status: "ok" } } } as Part],
+    };
+  });
 }
 
 /**

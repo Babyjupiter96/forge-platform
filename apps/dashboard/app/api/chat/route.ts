@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { forOrg } from "@forge/db";
 import type { PersonaConfig } from "@forge/shared";
-import { LeadProfileUpdateSchema } from "@forge/shared";
+import { LeadProfileUpdateSchema, type LeadProfile } from "@forge/shared";
 import {
   buildSystemPrompt,
   scoreLead,
   UPDATE_LEAD_PROFILE_TOOL_NAME,
   UPDATE_LEAD_PROFILE_TOOL_SCHEMA,
 } from "@forge/ai";
+import type { ChatHistoryMessage } from "@forge/ai";
 import { resolveSite, SiteNotFoundError, OriginNotAllowedError } from "@/lib/org-context";
 import { corsHeaders, preflightResponse } from "@/lib/cors";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -23,6 +24,14 @@ const ChatRequestBodySchema = z.object({
   conversationId: z.string().optional(),
   message: z.string().min(1).max(4000),
 });
+
+// Tool-calling models generally answer a turn that triggers a tool call
+// with *just* the call and no visible text — the natural-language reply
+// only comes back on a follow-up round once the tool's result is fed back
+// in. This caps how many such rounds one incoming user message can
+// trigger before we give up and reply with whatever text we have (a
+// pathological loop, not a normal conversation, would hit this).
+const MAX_TOOL_ROUNDS = 4;
 
 export async function OPTIONS(req: Request) {
   return preflightResponse(req.headers.get("origin"));
@@ -77,15 +86,12 @@ export async function POST(req: Request) {
   });
 
   const existingLead = await db.lead.findUnique({ where: { conversationId: conversation.id } });
-  const currentProfile = leadToProfile(existingLead);
   const persona = site.personaConfig as unknown as PersonaConfig;
-  const systemPrompt = buildSystemPrompt(persona, currentProfile);
 
   const allMessages = await db.message.findMany({
     where: { conversationId: conversation.id },
     orderBy: { createdAt: "asc" },
   });
-  const history = buildHistoryFromMessages(allMessages);
 
   let provider;
   try {
@@ -97,34 +103,66 @@ export async function POST(req: Request) {
     );
   }
 
-  let replyText = "";
-  const rawToolCalls: { id: string; name: string; args: Record<string, unknown> }[] = [];
+  const tools = [
+    {
+      name: UPDATE_LEAD_PROFILE_TOOL_NAME,
+      description:
+        "Record or update any lead qualification fields you've learned this turn. Only include fields with new or corrected information.",
+      parameters: UPDATE_LEAD_PROFILE_TOOL_SCHEMA,
+    },
+  ];
 
-  for await (const event of provider.streamChat({
-    systemPrompt,
-    history,
-    tools: [
-      {
-        name: UPDATE_LEAD_PROFILE_TOOL_NAME,
-        description:
-          "Record or update any lead qualification fields you've learned this turn. Only include fields with new or corrected information.",
-        parameters: UPDATE_LEAD_PROFILE_TOOL_SCHEMA,
-      },
-    ],
-  })) {
-    if (event.type === "text_delta") {
-      replyText += event.text;
-    } else if (event.type === "tool_call" && event.name === UPDATE_LEAD_PROFILE_TOOL_NAME) {
-      rawToolCalls.push({ id: event.id, name: event.name, args: event.args });
+  let runningProfile: LeadProfile = leadToProfile(existingLead);
+  let workingHistory: ChatHistoryMessage[] = buildHistoryFromMessages(allMessages);
+  let replyText = "";
+  const allToolCalls: { id: string; name: string; args: Record<string, unknown> }[] = [];
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const systemPrompt = buildSystemPrompt(persona, runningProfile);
+
+    let roundText = "";
+    const roundToolCalls: { id: string; name: string; args: Record<string, unknown> }[] = [];
+
+    for await (const event of provider.streamChat({ systemPrompt, history: workingHistory, tools })) {
+      if (event.type === "text_delta") {
+        roundText += event.text;
+      } else if (event.type === "tool_call" && event.name === UPDATE_LEAD_PROFILE_TOOL_NAME) {
+        roundToolCalls.push({ id: event.id, name: event.name, args: event.args });
+      }
     }
+
+    replyText += roundText;
+    allToolCalls.push(...roundToolCalls);
+
+    if (roundToolCalls.length === 0) {
+      // No new tool calls — this round's text is the model's actual reply.
+      break;
+    }
+
+    const validUpdates = roundToolCalls
+      .map((call) => LeadProfileUpdateSchema.safeParse(call.args))
+      .filter((result) => result.success)
+      .map((result) => result.data);
+    runningProfile = mergeProfileUpdates(runningProfile, validUpdates);
+
+    // Extend the in-memory history for the follow-up round: the tool-call
+    // round itself, plus a synthetic "ok" response per call so the next
+    // provider call's message sequence is valid (OpenAI requires a tool
+    // response message per call id; Gemini's history mapping just ignores
+    // "tool" role entries).
+    workingHistory = [
+      ...workingHistory,
+      { role: "assistant", content: roundText, toolCalls: roundToolCalls },
+      ...roundToolCalls.map((call) => ({
+        role: "tool" as const,
+        content: "ok",
+        toolCallId: call.id,
+        toolName: call.name,
+      })),
+    ];
   }
 
-  const validUpdates = rawToolCalls
-    .map((call) => LeadProfileUpdateSchema.safeParse(call.args))
-    .filter((result) => result.success)
-    .map((result) => result.data);
-
-  const updatedProfile = mergeProfileUpdates(currentProfile, validUpdates);
+  const updatedProfile = runningProfile;
   const scoreResult = scoreLead(updatedProfile);
 
   await db.message.create({
@@ -133,7 +171,7 @@ export async function POST(req: Request) {
       conversationId: conversation.id,
       role: "ASSISTANT",
       content: replyText,
-      toolCallJson: rawToolCalls.length > 0 ? rawToolCalls : undefined,
+      toolCallJson: allToolCalls.length > 0 ? allToolCalls : undefined,
     },
   });
 

@@ -1,8 +1,11 @@
 export interface ChatHistoryMessage {
   role: "user" | "assistant" | "tool";
   content: string;
-  /** Set when role === "tool": which assistant tool_call this responds to. */
+  /** Set when role === "tool": which assistant tool_call this responds to,
+   *  and which function it was (providers that match by name rather than
+   *  id, like Gemini, need the latter). */
   toolCallId?: string;
+  toolName?: string;
   /** Set when role === "assistant" and it made tool calls this turn — required
    *  so OpenAI's message-sequence validation accepts a later "tool" role
    *  message replying to these call ids on the next turn. */

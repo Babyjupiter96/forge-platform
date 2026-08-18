@@ -2,31 +2,30 @@
 /**
  * Phase 2 acceptance harness: drives POST /api/chat so the diagnostic
  * conversation, tool-call slot filling, and scoring can be exercised and
- * watched before any widget UI exists. Works both interactively (type and
- * press enter) and with piped/scripted input (`cat script.txt | pnpm chat-cli
- * -- --embedKey=...`) for repeatable test runs.
+ * watched before any widget UI exists.
  *
- * Usage: pnpm chat-cli -- --embedKey=<key> [--baseUrl=http://localhost:3000]
+ * Interactive: pnpm chat-cli -- --embedKey=<key>
+ * Scripted (repeatable test runs, one message per line, no readline
+ * involved — reads the whole file up front and processes it in a plain
+ * sequential loop): pnpm chat-cli -- --embedKey=<key> --script=path/to/turns.txt
  */
 import readline from "node:readline";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@forge/db";
 
 const args = process.argv.slice(2);
 const embedKey = args.find((a) => a.startsWith("--embedKey="))?.split("=")[1];
 const baseUrl = args.find((a) => a.startsWith("--baseUrl="))?.split("=")[1] ?? "http://localhost:3000";
+const scriptPath = args.find((a) => a.startsWith("--script="))?.split("=")[1];
 
 if (!embedKey) {
-  console.error("Usage: pnpm chat-cli -- --embedKey=<key> [--baseUrl=http://localhost:3000]");
+  console.error("Usage: pnpm chat-cli -- --embedKey=<key> [--baseUrl=...] [--script=path/to/turns.txt]");
   process.exit(1);
 }
 
 const visitorId = randomUUID();
 let conversationId: string | undefined;
-
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-
-console.log("Forge chat-cli — type a message and press enter. Ctrl+C to quit.\n");
 
 async function handleTurn(message: string) {
   try {
@@ -82,24 +81,42 @@ async function handleTurn(message: string) {
   }
 }
 
-rl.setPrompt("> ");
-rl.prompt();
+async function runScript(path: string) {
+  const lines = readFileSync(path, "utf-8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
 
-// Explicitly pause/resume around each turn so piped input (which arrives
-// as a burst of buffered 'line' events, unlike interactive typing) is
-// still processed strictly one turn at a time — each turn's request
-// depends on the previous one having already been persisted.
-rl.on("line", (line) => {
-  rl.pause();
-  const message = line.trim();
-  (message ? handleTurn(message) : Promise.resolve()).finally(() => {
-    rl.prompt();
-    rl.resume();
-  });
-});
+  for (const line of lines) {
+    console.log(`> ${line}`);
+    await handleTurn(line);
+  }
 
-rl.on("close", async () => {
-  console.log("\n(end of input)");
   await prisma.$disconnect();
   process.exit(0);
-});
+}
+
+function runInteractive() {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  console.log("Forge chat-cli — type a message and press enter. Ctrl+C to quit.\n");
+  rl.setPrompt("> ");
+  rl.prompt();
+
+  rl.on("line", async (line) => {
+    const message = line.trim();
+    if (message) await handleTurn(message);
+    rl.prompt();
+  });
+
+  rl.on("close", async () => {
+    console.log("\n(end of input)");
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+}
+
+if (scriptPath) {
+  runScript(scriptPath);
+} else {
+  runInteractive();
+}
