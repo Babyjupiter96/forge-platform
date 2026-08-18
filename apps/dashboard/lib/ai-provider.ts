@@ -1,9 +1,12 @@
-import { OpenAIProvider, type AIProvider } from "@forge/ai";
+import { OpenAIProvider, GeminiProvider, type AIProvider } from "@forge/ai";
 
 /**
- * Single call site that constructs the AI backend. Adding Anthropic later
+ * Single call site that constructs the AI backend. Adding another provider
  * means a new provider class in packages/ai plus one more branch here —
- * nothing else in the app touches a specific vendor's SDK.
+ * nothing else in the app touches a specific vendor's SDK. Model env vars
+ * are per-provider (OPENAI_MODEL / GEMINI_MODEL) rather than one shared
+ * AI_MODEL, so switching AI_PROVIDER can't accidentally hand one vendor's
+ * model name to another vendor's SDK.
  */
 export function getAIProvider(): AIProvider {
   const providerName = process.env.AI_PROVIDER ?? "openai";
@@ -13,7 +16,15 @@ export function getAIProvider(): AIProvider {
     if (!apiKey) {
       throw new Error("OPENAI_API_KEY is not set — add it to .env before using the chat endpoint");
     }
-    return new OpenAIProvider({ apiKey, model: process.env.AI_MODEL });
+    return new OpenAIProvider({ apiKey, model: process.env.OPENAI_MODEL });
+  }
+
+  if (providerName === "gemini") {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not set — add it to .env before using the chat endpoint");
+    }
+    return new GeminiProvider({ apiKey, model: process.env.GEMINI_MODEL });
   }
 
   throw new Error(`Unknown AI_PROVIDER: ${providerName}`);
