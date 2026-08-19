@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { WidgetConfigResponse } from "@forge/shared";
 import { fetchWidgetConfig, postChatMessage, type LeadStatus } from "./api";
 import { DEFAULT_THEME, themeToCssVars } from "./theme";
@@ -72,12 +72,18 @@ export default function App({ embedKey, baseUrl }: AppProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading, open]);
 
-  function handleOpen() {
+  const handleOpen = useCallback(() => {
     setOpen(true);
-    if (config && messages.length === 0) {
-      setMessages([{ role: "assistant", content: config.greeting }]);
-    }
-  }
+    setMessages((prev) => (config && prev.length === 0 ? [{ role: "assistant", content: config.greeting }] : prev));
+  }, [config]);
+
+  // Lets other elements on the host page (e.g. a hero mascot/graphic) open
+  // the widget without any direct coupling — they just dispatch this event
+  // on `document`. No-op if nothing ever fires it.
+  useEffect(() => {
+    document.addEventListener("forge-widget:open", handleOpen);
+    return () => document.removeEventListener("forge-widget:open", handleOpen);
+  }, [handleOpen]);
 
   async function handleSend() {
     const text = input.trim();
