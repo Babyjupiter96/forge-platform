@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Forge Widget — Dev Host</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body style="font-family: system-ui, sans-serif; background: #f5f5f5; margin: 0; color: #222;">
+    <div style="max-width: 720px; margin: 60px auto; padding: 0 24px;">
+      <h1>Example Client Site</h1>
+      <p>
+        This page stands in for a business's real website with the Forge Digital widget
+        embedded in the corner — for local development only, not part of the build output.
+      </p>
+    </div>
+
+    <!--
+      In production this script tag is the entire embed snippet: point src at the
+      built forge-widget.js, keep the two data attributes, done. In dev, Vite serves
+      src/main.tsx directly as a module.
+    -->
+    <script
+      type="module"
+      src="/src/main.tsx"
+      data-forge-embed-key="cmsxd5o300007ddb2vs2wbnc4"
+      data-forge-base-url="http://localhost:3001"
+    ></script>
+  </body>
+</html>

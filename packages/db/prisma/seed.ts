@@ -86,7 +86,7 @@ async function main() {
   });
 
   const siteData = {
-    allowedOrigins: ["http://localhost:3000", "https://weforgedigitalai.com"],
+    allowedOrigins: ["http://localhost:3000", "http://localhost:5173", "https://weforgedigitalai.com"],
     themeTokens: THEME_TOKENS,
     personaConfig: PERSONA_CONFIG,
     greeting: "Hey — what's going on with your business right now?",
