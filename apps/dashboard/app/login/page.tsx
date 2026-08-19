@@ -34,16 +34,18 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-neutral-950 px-4">
+    <main className="flex min-h-screen items-center justify-center bg-bg px-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-8"
+        className="w-full max-w-sm space-y-5 rounded-2xl border border-rule bg-panel p-8"
       >
-        <h1 className="text-xl font-semibold text-neutral-100">Forge Platform</h1>
-        <p className="text-sm text-neutral-400">Staff login</p>
+        <div className="space-y-1">
+          <h1 className="font-headline text-3xl text-ink">Forge Platform</h1>
+          <p className="font-label text-xs uppercase tracking-[0.1em] text-muted">Staff login</p>
+        </div>
 
         <div className="space-y-1">
-          <label className="text-sm text-neutral-300" htmlFor="email">
+          <label className="text-sm text-ink-soft" htmlFor="email">
             Email
           </label>
           <input
@@ -52,12 +54,12 @@ export default function LoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded border border-neutral-700 bg-neutral-800 px-3 py-2 text-neutral-100"
+            className="w-full rounded-lg border border-rule bg-panel-alt px-3 py-2 text-ink outline-none focus:border-steel"
           />
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm text-neutral-300" htmlFor="password">
+          <label className="text-sm text-ink-soft" htmlFor="password">
             Password
           </label>
           <input
@@ -66,16 +68,16 @@ export default function LoginPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded border border-neutral-700 bg-neutral-800 px-3 py-2 text-neutral-100"
+            className="w-full rounded-lg border border-rule bg-panel-alt px-3 py-2 text-ink outline-none focus:border-steel"
           />
         </div>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-accent">{error}</p>}
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900 disabled:opacity-50"
+          className="w-full rounded-lg bg-accent px-3 py-2 font-label text-xs uppercase tracking-[0.08em] text-ink disabled:opacity-50"
         >
           {submitting ? "Signing in…" : "Sign in"}
         </button>

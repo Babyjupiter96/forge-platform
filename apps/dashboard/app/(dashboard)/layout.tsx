@@ -4,10 +4,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await auth();
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      <header className="flex items-center justify-between border-b border-neutral-800 px-6 py-4">
-        <span className="text-sm font-medium">Forge Platform</span>
-        <div className="flex items-center gap-4 text-sm text-neutral-400">
+    <div className="min-h-screen bg-bg text-ink">
+      <header className="flex items-center justify-between border-b border-rule bg-panel-alt px-6 py-4">
+        <span className="font-label text-xs uppercase tracking-[0.12em] text-ink">Forge Platform</span>
+        <div className="flex items-center gap-4 text-sm text-muted">
           <span>{session?.user?.email}</span>
           <form
             action={async () => {
@@ -15,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               await signOut({ redirectTo: "/login" });
             }}
           >
-            <button type="submit" className="hover:text-neutral-100">
+            <button type="submit" className="hover:text-ink">
               Sign out
             </button>
           </form>
