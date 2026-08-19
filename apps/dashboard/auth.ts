@@ -2,17 +2,10 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@forge/db";
+import { authConfig } from "./auth.config";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: {
-    // Credentials provider does not support database sessions in Auth.js
-    // (the adapter's session-creation hook is only invoked for OAuth/Email
-    // flows) — JWT is the correct strategy here, not a shortcut.
-    strategy: "jwt",
-  },
-  pages: {
-    signIn: "/login",
-  },
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
@@ -42,19 +35,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    jwt: async ({ token, user }) => {
-      if (user) {
-        token.orgId = user.orgId;
-        token.role = user.role;
-      }
-      return token;
-    },
-    session: async ({ session, token }) => {
-      session.user.id = token.sub ?? "";
-      session.user.orgId = token.orgId;
-      session.user.role = token.role;
-      return session;
-    },
-  },
 });
