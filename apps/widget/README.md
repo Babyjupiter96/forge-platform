@@ -1,6 +1,6 @@
 # @forge/widget
 
-Phase 4 of the plan (`/Users/babyjupiter/.claude/plans/reflective-waddling-crown.md`).
+The embeddable chat widget.
 
 React + TypeScript, built with Vite in library mode (`pnpm --filter @forge/widget build`
 emits a single `dist/forge-widget.js` IIFE — no module loader or separate CSS file needed
