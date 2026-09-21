@@ -76,16 +76,29 @@ pnpm --filter @forge/widget dev    # stand-in host page for the widget
 ## Verifying it works
 
 ```bash
-pnpm --filter @forge/ai test                # scorer unit tests
-pnpm --filter @forge/db test:isolation      # proves cross-tenant isolation
+pnpm test                                   # 137 unit tests across ai, db, and dashboard (no database needed)
+pnpm typecheck
+pnpm --filter @forge/db test:isolation      # integration check against a real database: proves cross-tenant isolation
 pnpm chat-cli --embedKey=<key>              # run the full diagnostic conversation in the terminal
 pnpm db:studio                              # inspect the database
 ```
 
+What the unit tests pin down:
+
+| Area | What's asserted |
+|---|---|
+| `forOrg()` tenant scoping (`packages/db`) | Every read/update/delete on each tenant-owned model is filtered by `orgId`; a caller-supplied foreign `orgId` is overridden; creates, `createMany`, and upserts set it; unscoped models pass through; an empty `orgId` throws. |
+| Lead scoring (`packages/ai`) | The 59/60 qualification boundary, every budget and timeline weight, the "not asked" vs "don't know" budget distinction, decision-maker penalty, disqualification rules, score clamping, determinism, and no input mutation. |
+| Origin allowlist (`resolveSite`) | Unknown and inactive keys are indistinguishable (404); lookalike, wrong-scheme, wrong-port, trailing-slash, and wrong-case origins are rejected (403). |
+| Rate limiter and CORS | 20 requests per 60 s per key, exact window edge, independent keys; CORS echoes the specific origin and never a wildcard. |
+
+CI runs type-check and the test suite on every push.
+
 ## Known limitations
 
 - **The rate limiter is in-memory**, so it's per-process. Fine for one server; it needs a shared store like Redis before running multiple instances.
-- **Test coverage is narrow.** There are 5 scorer unit tests and the tenant-isolation script; there are no API-level or end-to-end tests yet.
+- **No API-level or end-to-end tests yet.** The units around the `/api/chat` route are tested (tenant scoping, scoring, origin check, rate limit, CORS), and the tenant-isolation script exercises a real database, but the route handler itself and the widget are not covered.
+- **`forOrg()` guards reads and creates, not `update` payloads.** An update that sets `data.orgId` would not be rewritten. Nothing in the app does this today, but the extension does not prevent it.
 - **Scoring weights are initial values.** They're constants meant to be tuned against real conversations.
 - **Booking is link-based.** The Calendly link provider works; the Calendly API provider is a stub that throws "not yet configured".
 - The staff dashboard is intentionally minimal (leads list and detail).
