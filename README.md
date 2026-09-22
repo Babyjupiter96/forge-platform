@@ -18,10 +18,13 @@ Forge Digital ([weforgedigitalai.com](https://weforgedigitalai.com)) is tenant #
 │  │(Shadow DOM)│ │                             │  5. score lead ─▶ deterministic    │
 │  └───────────┘  │                             │  6. save via forOrg(orgId) ─▶ DB   │
 └─────────────────┘                             │  7. QUALIFIED? ─▶ packages/booking │
+                                                 │  8. first time QUALIFIED? ─▶ email │
                                                 └────────────────┬───────────────────┘
                                                                  ▼
                                                    PostgreSQL (Prisma) + staff dashboard
 ```
+
+The turn a conversation first crosses the qualification threshold, `apps/dashboard/lib/email.ts` emails the configured address (Gmail SMTP via an app password) with the lead's score, contact details, and a dashboard link — so staff don't have to poll `/leads` to notice a qualified lead. It fires once per conversation, gated on `existingLead.status !== "QUALIFIED"`, not on every message of an already-qualified thread. `GMAIL_USER` / `GMAIL_APP_PASSWORD` / `LEAD_NOTIFY_EMAIL` in `.env.example`; if either Gmail credential is unset, sending is skipped with a console warning instead of failing the request.
 
 ## Key design decisions
 
@@ -76,7 +79,7 @@ pnpm --filter @forge/widget dev    # stand-in host page for the widget
 ## Verifying it works
 
 ```bash
-pnpm test                                   # 137 unit tests across ai, db, and dashboard (no database needed)
+pnpm test                                   # 145 unit tests across ai, db, and dashboard (no database needed)
 pnpm typecheck
 pnpm --filter @forge/db test:isolation      # integration check against a real database: proves cross-tenant isolation
 pnpm chat-cli --embedKey=<key>              # run the full diagnostic conversation in the terminal
@@ -91,6 +94,7 @@ What the unit tests pin down:
 | Lead scoring (`packages/ai`) | The 59/60 qualification boundary, every budget and timeline weight, the "not asked" vs "don't know" budget distinction, decision-maker penalty, disqualification rules, score clamping, determinism, and no input mutation. |
 | Origin allowlist (`resolveSite`) | Unknown and inactive keys are indistinguishable (404); lookalike, wrong-scheme, wrong-port, trailing-slash, and wrong-case origins are rejected (403). |
 | Rate limiter and CORS | 20 requests per 60 s per key, exact window edge, independent keys; CORS echoes the specific origin and never a wildcard. |
+| Qualification email (`/api/chat`, `lib/email.ts`) | Fires once, the turn a conversation first reaches QUALIFIED, not on later messages of an already-qualified thread; skipped without failing the request when no notify address is configured; subject/body content, HTML escaping. |
 
 CI runs type-check and the test suite on every push.
 
@@ -102,6 +106,7 @@ CI runs type-check and the test suite on every push.
 - **Scoring weights are initial values.** They're constants meant to be tuned against real conversations.
 - **Booking is link-based.** The Calendly link provider works; the Calendly API provider is a stub that throws "not yet configured".
 - The staff dashboard is intentionally minimal (leads list and detail).
+- **Lead notification email is per-org via env vars, not a Site/Organization column.** Fine with one tenant (Forge Digital); a second tenant wanting its own notify address would need that moved into the schema.
 
 ## Tech
 

@@ -17,6 +17,7 @@ import { getAIProvider } from "@/lib/ai-provider";
 import { getBookingProvider } from "@/lib/booking-provider";
 import { buildHistoryFromMessages } from "@/lib/chat-history";
 import { leadToProfile, mergeProfileUpdates } from "@/lib/lead-profile";
+import { sendMail, leadQualifiedEmail, getNotifyEmail } from "@/lib/email";
 
 const ChatRequestBodySchema = z.object({
   embedKey: z.string().min(1),
@@ -205,6 +206,17 @@ export async function POST(req: Request) {
         contactEmail: lead.contactEmail,
       });
       await db.lead.update({ where: { conversationId: conversation.id }, data: { bookingUrl } });
+    }
+  }
+
+  // Notify once, the turn a lead first crosses the threshold — not on
+  // every message of an already-qualified conversation.
+  const justQualified = scoreResult.status === "QUALIFIED" && existingLead?.status !== "QUALIFIED";
+  if (justQualified) {
+    const notifyEmail = getNotifyEmail();
+    if (notifyEmail) {
+      const { subject, html } = leadQualifiedEmail({ ...lead, bookingUrl });
+      await sendMail({ to: notifyEmail, subject, html });
     }
   }
 
